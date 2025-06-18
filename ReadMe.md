@@ -79,19 +79,3 @@ converter.createUI('container', 'jpg-to-png', {
     showProgress: true
 });
 ```
-
-## Поддерживаемые форматы
-
-| Тип | Входные | Выходные |
-|-----|---------|----------|
-| Изображения | JPG, PNG, WebP | JPG, PNG, PDF |
-| Данные | CSV, JSON | CSV, JSON, TXT |
-
-## Требования
-
-- Современный браузер с поддержкой Canvas API
-- Для JPG→PDF: библиотека PDF-lib (опционально)
-
-## Лицензия
-
-MIT License
