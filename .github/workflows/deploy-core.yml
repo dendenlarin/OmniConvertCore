@@ -1,0 +1,27 @@
+name: Deploy OmniConvertCore to ISPmanager via FTP
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Deploy omni-convert.js via FTP
+        uses: SamKirkland/FTP-Deploy-Action@4.3.0
+        with:
+          server:     ${{ secrets.FTP_HOST }}
+          username:   ${{ secrets.FTP_USER }}
+          password:   ${{ secrets.FTP_PASS }}
+          local-dir:  src/                               # берём только src/
+          server-dir: ${{ secrets.FTP_PATH }}/src/       # закидываем в ту же папку /src/ на сервере
+          include: |
+            omni-convert.js
+          exclude: |
+            *                                           # исключаем всё, кроме include
