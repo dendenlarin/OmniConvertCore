@@ -1,3 +1,4 @@
+# .github/workflows/deploy-core.yml
 name: Deploy OmniConvertCore via FTP
 
 on:
@@ -18,5 +19,8 @@ jobs:
           server:     ${{ secrets.FTP_HOST }}
           username:   ${{ secrets.FTP_USER }}
           password:   ${{ secrets.FTP_PASS }}
-          local-dir:  src/omni-convert.js            
-          server-dir: ${{ secrets.FTP_PATH }}/src/   
+          local-dir:  src/                           # ОБЯЗАТЕЛЬНО папка, завершается слэшем
+          server-dir: ${{ secrets.FTP_PATH }}/src/   # тоже папка
+          exclude: |                                 # исключаем всё…
+            **/*                                   
+            !omni-convert.js                        # …кроме этого файла
