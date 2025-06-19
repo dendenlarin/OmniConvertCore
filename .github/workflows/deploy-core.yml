@@ -1,9 +1,8 @@
-name: Deploy OmniConvertCore to ISPmanager via FTP
+name: Deploy OmniConvertCore via FTP
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
   deploy:
@@ -19,9 +18,5 @@ jobs:
           server:     ${{ secrets.FTP_HOST }}
           username:   ${{ secrets.FTP_USER }}
           password:   ${{ secrets.FTP_PASS }}
-          local-dir:  src/                               # берём только src/
-          server-dir: ${{ secrets.FTP_PATH }}/src/       # закидываем в ту же папку /src/ на сервере
-          include: |
-            omni-convert.js
-          exclude: |
-            *                                           # исключаем всё, кроме include
+          local-dir:  src/omni-convert.js            
+          server-dir: ${{ secrets.FTP_PATH }}/src/   
