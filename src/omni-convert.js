@@ -320,83 +320,309 @@
         }
     }
 
-    // Image Resizer
-    class ImageResizer extends BaseConverter {
+
+    // PNG to WebP Converter
+    class PngToWebpConverter extends BaseConverter {
         constructor(options = {}) {
             super(options);
-            this.supportedInputs = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', '.jpg', '.jpeg', '.png', '.webp'];
-            this.resizeMode = options.resizeMode || 'percentage'; // 'percentage' or 'dimensions'
-            this.percentage = options.percentage || 50;
-            this.width = options.width || 800;
-            this.height = options.height || 600;
-            this.maintainAspectRatio = options.maintainAspectRatio !== false;
-            this.quality = options.quality || 0.9;
+            this.supportedInputs = ['image/png', '.png'];
+            this.outputType = 'image/webp';
+            this.quality = options.quality || 0.8;
         }
 
         async convert(file) {
             this.validateFile(file, this.supportedInputs);
-            this.log(`Resizing ${file.name}`);
+            this.log(`Converting ${file.name} from PNG to WebP`);
 
             const img = await this.loadImage(file);
-            let newWidth, newHeight;
-
-            if (this.resizeMode === 'percentage') {
-                newWidth = Math.round(img.width * (this.percentage / 100));
-                newHeight = Math.round(img.height * (this.percentage / 100));
-            } else {
-                newWidth = this.width;
-                newHeight = this.height;
-
-                if (this.maintainAspectRatio) {
-                    const aspectRatio = img.width / img.height;
-                    if (newWidth / newHeight > aspectRatio) {
-                        newWidth = Math.round(newHeight * aspectRatio);
-                    } else {
-                        newHeight = Math.round(newWidth / aspectRatio);
-                    }
-                }
-            }
-
-            const canvas = this.createCanvas(newWidth, newHeight);
+            const canvas = this.createCanvas(img.width, img.height);
             const ctx = canvas.getContext('2d');
 
-            // Enable smooth scaling
-            ctx.imageSmoothingEnabled = true;
-            ctx.imageSmoothingQuality = 'high';
-            ctx.drawImage(img, 0, 0, newWidth, newHeight);
-
+            ctx.drawImage(img, 0, 0);
             URL.revokeObjectURL(img.src);
 
-            // Determine output format
-            let mimeType = file.type;
-            if (!mimeType || mimeType === 'image/webp') {
-                mimeType = 'image/jpeg';
-            }
-
             const blob = await new Promise(resolve => {
-                if (mimeType === 'image/png') {
-                    canvas.toBlob(resolve, mimeType);
-                } else {
-                    canvas.toBlob(resolve, mimeType, this.quality);
-                }
+                canvas.toBlob(resolve, this.outputType, this.quality);
             });
 
-            // Generate filename with size info
-            const baseName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
-            const extension = file.name.substring(file.name.lastIndexOf('.')) || '.jpg';
-            const filename = `${baseName}_${newWidth}x${newHeight}${extension}`;
+            if (!blob) {
+                throw new Error('Failed to convert PNG to WebP. Browser may not support WebP format.');
+            }
 
             return {
                 blob,
-                filename,
-                mimeType,
+                filename: OmniConvertCore.generateFilename(file.name, 'webp'),
+                mimeType: this.outputType,
                 originalSize: file.size,
                 newSize: blob.size,
-                originalDimensions: { width: img.width, height: img.height },
-                newDimensions: { width: newWidth, height: newHeight },
-                resizeMode: this.resizeMode,
                 quality: this.quality
             };
+        }
+    }
+
+    // JPG to WebP Converter
+    class JpgToWebpConverter extends BaseConverter {
+        constructor(options = {}) {
+            super(options);
+            this.supportedInputs = ['image/jpeg', 'image/jpg', '.jpg', '.jpeg'];
+            this.outputType = 'image/webp';
+            this.quality = options.quality || 0.8;
+        }
+
+        async convert(file) {
+            this.validateFile(file, this.supportedInputs);
+            this.log(`Converting ${file.name} from JPG to WebP`);
+
+            const img = await this.loadImage(file);
+            const canvas = this.createCanvas(img.width, img.height);
+            const ctx = canvas.getContext('2d');
+
+            ctx.drawImage(img, 0, 0);
+            URL.revokeObjectURL(img.src);
+
+            const blob = await new Promise(resolve => {
+                canvas.toBlob(resolve, this.outputType, this.quality);
+            });
+
+            if (!blob) {
+                throw new Error('Failed to convert JPG to WebP. Browser may not support WebP format.');
+            }
+
+            return {
+                blob,
+                filename: OmniConvertCore.generateFilename(file.name, 'webp'),
+                mimeType: this.outputType,
+                originalSize: file.size,
+                newSize: blob.size,
+                quality: this.quality
+            };
+        }
+    }
+
+    // HEIC to JPG Converter (requires heic2any library)
+    class HeicToJpgConverter extends BaseConverter {
+        constructor(options = {}) {
+            super(options);
+            this.supportedInputs = ['image/heic', 'image/heif', '.heic', '.heif'];
+            this.outputType = 'image/jpeg';
+            this.quality = options.quality || 0.9;
+            
+            if (typeof heic2any === 'undefined' && typeof window !== 'undefined') {
+                console.warn('heic2any library not found. Please include heic2any library for HEIC to JPG conversion.');
+            }
+        }
+
+        async convert(file) {
+            this.validateFile(file, this.supportedInputs);
+            this.log(`Converting ${file.name} from HEIC to JPG`);
+
+            if (typeof heic2any === 'undefined') {
+                throw new Error('heic2any library is required for HEIC to JPG conversion. Please include it in your page.');
+            }
+
+            try {
+                const convertedBlob = await heic2any({
+                    blob: file,
+                    toType: 'image/jpeg',
+                    quality: this.quality
+                });
+
+                const blob = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
+
+                return {
+                    blob,
+                    filename: OmniConvertCore.generateFilename(file.name, 'jpg'),
+                    mimeType: this.outputType,
+                    originalSize: file.size,
+                    newSize: blob.size,
+                    quality: this.quality
+                };
+            } catch (error) {
+                throw new Error(`Failed to convert HEIC to JPG: ${error.message}`);
+            }
+        }
+    }
+
+    // SVG to PNG Converter
+    class SvgToPngConverter extends BaseConverter {
+        constructor(options = {}) {
+            super(options);
+            this.supportedInputs = ['image/svg+xml', '.svg'];
+            this.outputType = 'image/png';
+            this.width = options.width || null;
+            this.height = options.height || null;
+            this.scale = options.scale || 1;
+            this.backgroundColor = options.backgroundColor || 'transparent';
+        }
+
+        async convert(file) {
+            this.validateFile(file, this.supportedInputs);
+            this.log(`Converting ${file.name} from SVG to PNG`);
+
+            const svgText = await file.text();
+            const blob = await this.svgToPng(svgText);
+
+            return {
+                blob,
+                filename: OmniConvertCore.generateFilename(file.name, 'png'),
+                mimeType: this.outputType,
+                originalSize: file.size,
+                newSize: blob.size,
+                scale: this.scale
+            };
+        }
+
+        async svgToPng(svgText) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+
+                    // Set canvas dimensions
+                    canvas.width = this.width || img.width * this.scale;
+                    canvas.height = this.height || img.height * this.scale;
+
+                    // Set background color if not transparent
+                    if (this.backgroundColor !== 'transparent') {
+                        ctx.fillStyle = this.backgroundColor;
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    }
+
+                    // Draw SVG
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+                    canvas.toBlob((blob) => {
+                        if (blob) {
+                            resolve(blob);
+                        } else {
+                            reject(new Error('Failed to convert SVG to PNG'));
+                        }
+                    }, this.outputType);
+                };
+
+                img.onerror = () => reject(new Error('Failed to load SVG'));
+
+                // Create data URL from SVG
+                const svgBlob = new Blob([svgText], { type: 'image/svg+xml' });
+                img.src = URL.createObjectURL(svgBlob);
+            });
+        }
+    }
+
+    // GIF to MP4 Converter (requires FFmpeg.js or similar)
+    class GifToMp4Converter extends BaseConverter {
+        constructor(options = {}) {
+            super(options);
+            this.supportedInputs = ['image/gif', '.gif'];
+            this.outputType = 'video/mp4';
+            this.quality = options.quality || 'medium';
+            this.fps = options.fps || 10;
+            
+            if (typeof FFmpeg === 'undefined' && typeof window !== 'undefined') {
+                console.warn('FFmpeg.js not found. GIF to MP4 conversion will use basic canvas-based approach.');
+            }
+        }
+
+        async convert(file) {
+            this.validateFile(file, this.supportedInputs);
+            this.log(`Converting ${file.name} from GIF to MP4`);
+
+            // Check if FFmpeg is available for better conversion
+            if (typeof FFmpeg !== 'undefined') {
+                return this.convertWithFFmpeg(file);
+            } else {
+                // Use basic canvas-based approach
+                return this.convertBasic(file);
+            }
+        }
+
+        async convertWithFFmpeg(file) {
+            try {
+                const ffmpeg = new FFmpeg.FFmpeg();
+                await ffmpeg.load();
+
+                const inputName = 'input.gif';
+                const outputName = 'output.mp4';
+
+                await ffmpeg.writeFile(inputName, new Uint8Array(await file.arrayBuffer()));
+                
+                await ffmpeg.exec([
+                    '-i', inputName,
+                    '-movflags', 'faststart',
+                    '-pix_fmt', 'yuv420p',
+                    '-vf', `fps=${this.fps}`,
+                    outputName
+                ]);
+
+                const data = await ffmpeg.readFile(outputName);
+                const blob = new Blob([data.buffer], { type: this.outputType });
+
+                return {
+                    blob,
+                    filename: OmniConvertCore.generateFilename(file.name, 'mp4'),
+                    mimeType: this.outputType,
+                    originalSize: file.size,
+                    newSize: blob.size,
+                    fps: this.fps
+                };
+            } catch (error) {
+                throw new Error(`FFmpeg conversion failed: ${error.message}`);
+            }
+        }
+
+        async convertBasic(file) {
+            // Basic approach: extract frames and create video using MediaRecorder
+            const img = await this.loadImage(file);
+            const canvas = this.createCanvas(img.width, img.height);
+            const ctx = canvas.getContext('2d');
+
+            // Note: This is a simplified approach
+            // Real GIF to MP4 conversion requires frame extraction
+            ctx.drawImage(img, 0, 0);
+
+            const stream = canvas.captureStream(this.fps);
+            const chunks = [];
+            
+            const recorder = new MediaRecorder(stream, {
+                mimeType: 'video/webm;codecs=vp8' // Fallback to WebM if MP4 not supported
+            });
+
+            return new Promise((resolve, reject) => {
+                recorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        chunks.push(event.data);
+                    }
+                };
+
+                recorder.onstop = () => {
+                    const blob = new Blob(chunks, { 
+                        type: recorder.mimeType.includes('mp4') ? 'video/mp4' : 'video/webm' 
+                    });
+                    
+                    resolve({
+                        blob,
+                        filename: OmniConvertCore.generateFilename(file.name, 
+                            recorder.mimeType.includes('mp4') ? 'mp4' : 'webm'),
+                        mimeType: blob.type,
+                        originalSize: file.size,
+                        newSize: blob.size,
+                        fps: this.fps,
+                        note: 'Basic conversion - install FFmpeg.js for better results'
+                    });
+                };
+
+                recorder.onerror = reject;
+
+                recorder.start();
+                
+                // Record for 3 seconds (this is simplified)
+                setTimeout(() => {
+                    recorder.stop();
+                    stream.getTracks().forEach(track => track.stop());
+                }, 3000);
+            });
         }
     }
 
@@ -482,6 +708,192 @@
                 originalSize: fileList.reduce((sum, file) => sum + file.size, 0),
                 newSize: blob.size,
                 pageCount: fileList.length
+            };
+        }
+    }
+
+    // MP4 to GIF Converter (requires FFmpeg.js or similar)
+    class Mp4ToGifConverter extends BaseConverter {
+        constructor(options = {}) {
+            super(options);
+            this.supportedInputs = ['video/mp4', '.mp4'];
+            this.outputType = 'image/gif';
+            this.fps = options.fps || 10;
+            this.scale = options.scale || 1.0;
+            this.startTime = options.startTime || 0;
+            this.duration = options.duration || null;
+            this.quality = options.quality || 'medium'; // 'low', 'medium', 'high'
+            
+            if (typeof FFmpeg === 'undefined' && typeof window !== 'undefined') {
+                console.warn('FFmpeg.js not found. MP4 to GIF conversion will use basic canvas-based approach.');
+            }
+        }
+
+        async convert(file) {
+            this.validateFile(file, this.supportedInputs);
+            this.log(`Converting ${file.name} from MP4 to GIF`);
+
+            // Check if FFmpeg is available for better conversion
+            if (typeof FFmpeg !== 'undefined') {
+                return this.convertWithFFmpeg(file);
+            } else {
+                // Use basic canvas-based approach
+                return this.convertBasic(file);
+            }
+        }
+
+        async convertWithFFmpeg(file) {
+            try {
+                const ffmpeg = new FFmpeg.FFmpeg();
+                await ffmpeg.load();
+
+                const inputName = 'input.mp4';
+                const outputName = 'output.gif';
+
+                await ffmpeg.writeFile(inputName, new Uint8Array(await file.arrayBuffer()));
+                
+                // Build FFmpeg command
+                const cmd = ['-i', inputName];
+                
+                // Add start time if specified
+                if (this.startTime > 0) {
+                    cmd.push('-ss', this.startTime.toString());
+                }
+                
+                // Add duration if specified
+                if (this.duration) {
+                    cmd.push('-t', this.duration.toString());
+                }
+                
+                // Set fps and scale
+                let vf = `fps=${this.fps}`;
+                if (this.scale !== 1.0) {
+                    vf += `,scale=iw*${this.scale}:ih*${this.scale}`;
+                }
+                
+                // Quality settings
+                let palette = '';
+                switch (this.quality) {
+                    case 'high':
+                        palette = ':flags=lanczos,palettegen=max_colors=256';
+                        break;
+                    case 'medium':
+                        palette = ':flags=lanczos,palettegen=max_colors=128';
+                        break;
+                    case 'low':
+                        palette = ':flags=lanczos,palettegen=max_colors=64';
+                        break;
+                }
+                
+                vf += palette;
+                cmd.push('-vf', vf);
+                cmd.push('-loop', '0'); // Infinite loop
+                cmd.push(outputName);
+
+                await ffmpeg.exec(cmd);
+
+                const data = await ffmpeg.readFile(outputName);
+                const blob = new Blob([data.buffer], { type: this.outputType });
+
+                return {
+                    blob,
+                    filename: OmniConvertCore.generateFilename(file.name, 'gif'),
+                    mimeType: this.outputType,
+                    originalSize: file.size,
+                    newSize: blob.size,
+                    fps: this.fps,
+                    scale: this.scale,
+                    quality: this.quality,
+                    startTime: this.startTime,
+                    duration: this.duration
+                };
+            } catch (error) {
+                throw new Error(`FFmpeg conversion failed: ${error.message}`);
+            }
+        }
+
+        async convertBasic(file) {
+            // Basic approach using video element and canvas
+            const video = document.createElement('video');
+            video.muted = true;
+            video.crossOrigin = 'anonymous';
+            
+            return new Promise((resolve, reject) => {
+                video.onloadedmetadata = async () => {
+                    try {
+                        const canvas = document.createElement('canvas');
+                        const ctx = canvas.getContext('2d');
+                        
+                        // Set canvas size based on video and scale
+                        canvas.width = Math.floor(video.videoWidth * this.scale);
+                        canvas.height = Math.floor(video.videoHeight * this.scale);
+                        
+                        const frames = [];
+                        const videoDuration = this.duration || video.duration;
+                        const frameInterval = 1 / this.fps;
+                        const totalFrames = Math.floor(videoDuration * this.fps);
+                        
+                        let currentFrame = 0;
+                        video.currentTime = this.startTime;
+                        
+                        const captureFrame = () => {
+                            if (currentFrame >= totalFrames) {
+                                // Convert frames to GIF (simplified - would need gif.js library for real implementation)
+                                this.createGifFromFrames(frames, canvas.width, canvas.height)
+                                    .then(resolve)
+                                    .catch(reject);
+                                return;
+                            }
+                            
+                            // Draw current frame
+                            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                            
+                            // Store frame data
+                            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                            frames.push(imageData);
+                            
+                            currentFrame++;
+                            video.currentTime = this.startTime + (currentFrame * frameInterval);
+                        };
+                        
+                        video.onseeked = captureFrame;
+                        video.currentTime = this.startTime;
+                        
+                    } catch (error) {
+                        reject(error);
+                    }
+                };
+                
+                video.onerror = () => reject(new Error('Failed to load video'));
+                video.src = URL.createObjectURL(file);
+            });
+        }
+
+        async createGifFromFrames(frames, width, height) {
+            // This is a simplified implementation
+            // In real usage, you would use gif.js library for proper GIF encoding
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            
+            // For now, just return the last frame as a static image
+            // Real GIF creation would require gif.js or similar library
+            if (frames.length > 0) {
+                ctx.putImageData(frames[frames.length - 1], 0, 0);
+            }
+            
+            const blob = await new Promise(resolve => {
+                canvas.toBlob(resolve, 'image/gif');
+            });
+            
+            return {
+                blob,
+                filename: 'converted-video.gif',
+                mimeType: this.outputType,
+                originalSize: 0,
+                newSize: blob.size,
+                note: 'Basic conversion - install FFmpeg.js and gif.js for full GIF animation support'
             };
         }
     }
@@ -682,70 +1094,456 @@
         }
     }
 
-    // Base64 Encoder/Decoder
-    class Base64Converter extends BaseConverter {
+    // XML to JSON Converter
+    class XmlToJsonConverter extends BaseConverter {
         constructor(options = {}) {
             super(options);
-            this.operation = options.operation || 'encode'; // 'encode' or 'decode'
-            this.outputFormat = options.outputFormat || 'text/plain';
+            this.supportedInputs = ['text/xml', 'application/xml', '.xml'];
+            this.outputType = 'application/json';
+            this.attributePrefix = options.attributePrefix || '@';
+            this.textNodeName = options.textNodeName || '#text';
+            this.ignoreAttributes = options.ignoreAttributes || false;
+            this.parseNumbers = options.parseNumbers !== false;
+            this.parseBooleans = options.parseBooleans !== false;
         }
 
         async convert(file) {
-            this.log(`${this.operation === 'encode' ? 'Encoding' : 'Decoding'} ${file.name} with Base64`);
+            this.validateFile(file, this.supportedInputs);
+            this.log(`Converting ${file.name} from XML to JSON`);
 
-            if (this.operation === 'encode') {
-                return this.encode(file);
-            } else {
-                return this.decode(file);
+            const xmlText = await file.text();
+            
+            try {
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
+                
+                // Check for parsing errors
+                const parseError = xmlDoc.getElementsByTagName('parsererror');
+                if (parseError.length > 0) {
+                    throw new Error('Invalid XML: ' + parseError[0].textContent);
+                }
+
+                const jsonData = this.xmlToJson(xmlDoc.documentElement);
+                const jsonString = JSON.stringify(jsonData, null, 2);
+                const blob = new Blob([jsonString], { type: this.outputType });
+
+                return {
+                    blob,
+                    filename: OmniConvertCore.generateFilename(file.name, 'json'),
+                    mimeType: this.outputType,
+                    originalSize: file.size,
+                    newSize: blob.size,
+                    rootElement: xmlDoc.documentElement.nodeName
+                };
+            } catch (error) {
+                throw new Error(`XML parsing failed: ${error.message}`);
             }
         }
 
-        async encode(file) {
-            const arrayBuffer = await file.arrayBuffer();
-            const bytes = new Uint8Array(arrayBuffer);
-            let binary = '';
-            
-            for (let i = 0; i < bytes.byteLength; i++) {
-                binary += String.fromCharCode(bytes[i]);
+        xmlToJson(xmlNode) {
+            let result = {};
+
+            // Handle attributes
+            if (xmlNode.attributes && xmlNode.attributes.length > 0 && !this.ignoreAttributes) {
+                for (let i = 0; i < xmlNode.attributes.length; i++) {
+                    const attribute = xmlNode.attributes[i];
+                    result[this.attributePrefix + attribute.nodeName] = this.parseValue(attribute.nodeValue);
+                }
             }
+
+            // Handle child nodes
+            if (xmlNode.hasChildNodes()) {
+                for (let i = 0; i < xmlNode.childNodes.length; i++) {
+                    const childNode = xmlNode.childNodes[i];
+
+                    if (childNode.nodeType === Node.TEXT_NODE) {
+                        const textContent = childNode.nodeValue.trim();
+                        if (textContent) {
+                            if (Object.keys(result).length === 0) {
+                                // If no attributes or other elements, return the text directly
+                                return this.parseValue(textContent);
+                            } else {
+                                // Add text content with special key
+                                result[this.textNodeName] = this.parseValue(textContent);
+                            }
+                        }
+                    } else if (childNode.nodeType === Node.ELEMENT_NODE) {
+                        const childName = childNode.nodeName;
+                        const childValue = this.xmlToJson(childNode);
+
+                        if (result[childName]) {
+                            // Multiple elements with same name - convert to array
+                            if (!Array.isArray(result[childName])) {
+                                result[childName] = [result[childName]];
+                            }
+                            result[childName].push(childValue);
+                        } else {
+                            result[childName] = childValue;
+                        }
+                    }
+                }
+            }
+
+            return Object.keys(result).length === 0 ? null : result;
+        }
+
+        parseValue(value) {
+            if (!this.parseNumbers && !this.parseBooleans) {
+                return value;
+            }
+
+            // Parse booleans
+            if (this.parseBooleans) {
+                if (value.toLowerCase() === 'true') return true;
+                if (value.toLowerCase() === 'false') return false;
+            }
+
+            // Parse numbers
+            if (this.parseNumbers) {
+                if (!isNaN(value) && !isNaN(parseFloat(value))) {
+                    return parseFloat(value);
+                }
+            }
+
+            return value;
+        }
+    }
+
+    // Markdown to HTML Converter
+    class MarkdownToHtmlConverter extends BaseConverter {
+        constructor(options = {}) {
+            super(options);
+            this.supportedInputs = ['text/markdown', 'text/x-markdown', '.md', '.markdown'];
+            this.outputType = 'text/html';
+            this.enableTables = options.enableTables !== false;
+            this.enableCodeBlocks = options.enableCodeBlocks !== false;
+            this.enableStrikethrough = options.enableStrikethrough !== false;
+            this.enableTaskLists = options.enableTaskLists !== false;
+        }
+
+        async convert(file) {
+            this.validateFile(file, this.supportedInputs);
+            this.log(`Converting ${file.name} from Markdown to HTML`);
+
+            const markdownText = await file.text();
+            const htmlContent = this.markdownToHtml(markdownText);
             
-            const base64 = btoa(binary);
-            const blob = new Blob([base64], { type: 'text/plain' });
+            const blob = new Blob([htmlContent], { type: this.outputType });
 
             return {
                 blob,
-                filename: OmniConvertCore.generateFilename(file.name, 'txt'),
-                mimeType: 'text/plain',
+                filename: OmniConvertCore.generateFilename(file.name, 'html'),
+                mimeType: this.outputType,
                 originalSize: file.size,
                 newSize: blob.size,
-                operation: 'encode'
+                features: {
+                    tables: this.enableTables,
+                    codeBlocks: this.enableCodeBlocks,
+                    strikethrough: this.enableStrikethrough,
+                    taskLists: this.enableTaskLists
+                }
             };
         }
 
-        async decode(file) {
-            const text = await file.text();
+        markdownToHtml(markdown) {
+            let html = markdown;
+
+            // Headers
+            html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+            html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
+            html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+
+            // Bold
+            html = html.replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>');
+            html = html.replace(/__(.*?)__/gim, '<strong>$1</strong>');
+
+            // Italic
+            html = html.replace(/\*(.*?)\*/gim, '<em>$1</em>');
+            html = html.replace(/_(.*?)_/gim, '<em>$1</em>');
+
+            // Strikethrough
+            if (this.enableStrikethrough) {
+                html = html.replace(/~~(.*?)~~/gim, '<del>$1</del>');
+            }
+
+            // Code blocks
+            if (this.enableCodeBlocks) {
+                html = html.replace(/```([^`]*?)```/gims, '<pre><code>$1</code></pre>');
+                html = html.replace(/`([^`]*?)`/gim, '<code>$1</code>');
+            }
+
+            // Links
+            html = html.replace(/\[([^\]]*?)\]\(([^\)]*?)\)/gim, '<a href="$2">$1</a>');
+
+            // Images
+            html = html.replace(/!\[([^\]]*?)\]\(([^\)]*?)\)/gim, '<img alt="$1" src="$2" />');
+
+            // Lists
+            html = html.replace(/^\* (.*$)/gim, '<li>$1</li>');
+            html = html.replace(/^\d+\. (.*$)/gim, '<li>$1</li>');
             
-            try {
-                const binary = atob(text.trim());
-                const bytes = new Uint8Array(binary.length);
+            // Wrap consecutive list items
+            html = html.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+            html = html.replace(/(<li>.*<\/li>)/s, '<ol>$1</ol>');
+
+            // Task lists
+            if (this.enableTaskLists) {
+                html = html.replace(/^\- \[ \] (.*$)/gim, '<li><input type="checkbox" disabled> $1</li>');
+                html = html.replace(/^\- \[x\] (.*$)/gim, '<li><input type="checkbox" checked disabled> $1</li>');
+            }
+
+            // Horizontal rules
+            html = html.replace(/^---$/gim, '<hr>');
+
+            // Blockquotes
+            html = html.replace(/^> (.*$)/gim, '<blockquote>$1</blockquote>');
+
+            // Tables (basic support)
+            if (this.enableTables) {
+                html = this.convertTables(html);
+            }
+
+            // Line breaks
+            html = html.replace(/\n\n/gim, '</p><p>');
+            html = html.replace(/\n/gim, '<br>');
+
+            // Wrap in paragraphs
+            html = '<p>' + html + '</p>';
+
+            // Clean up empty paragraphs
+            html = html.replace(/<p><\/p>/gim, '');
+
+            return html;
+        }
+
+        convertTables(html) {
+            const lines = html.split('\n');
+            let inTable = false;
+            let tableHtml = '';
+            let result = [];
+
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].trim();
                 
-                for (let i = 0; i < binary.length; i++) {
-                    bytes[i] = binary.charCodeAt(i);
+                if (line.includes('|') && !inTable) {
+                    // Start of table
+                    inTable = true;
+                    tableHtml = '<table><thead><tr>';
+                    const headers = line.split('|').map(h => h.trim()).filter(h => h);
+                    headers.forEach(header => {
+                        tableHtml += `<th>${header}</th>`;
+                    });
+                    tableHtml += '</tr></thead><tbody>';
+                } else if (line.includes('|') && inTable && !line.includes('---')) {
+                    // Table row
+                    tableHtml += '<tr>';
+                    const cells = line.split('|').map(c => c.trim()).filter(c => c);
+                    cells.forEach(cell => {
+                        tableHtml += `<td>${cell}</td>`;
+                    });
+                    tableHtml += '</tr>';
+                } else if (inTable && !line.includes('|')) {
+                    // End of table
+                    tableHtml += '</tbody></table>';
+                    result.push(tableHtml);
+                    inTable = false;
+                    result.push(line);
+                } else if (!inTable) {
+                    result.push(line);
+                }
+            }
+
+            if (inTable) {
+                tableHtml += '</tbody></table>';
+                result.push(tableHtml);
+            }
+
+            return result.join('\n');
+        }
+    }
+
+    // JSON to XML Converter
+    class JsonToXmlConverter extends BaseConverter {
+        constructor(options = {}) {
+            super(options);
+            this.supportedInputs = ['application/json', '.json'];
+            this.outputType = 'text/xml';
+            this.rootElementName = options.rootElementName || 'root';
+            this.attributePrefix = options.attributePrefix || '@';
+            this.textNodeName = options.textNodeName || '#text';
+            this.arrayElementName = options.arrayElementName || 'item';
+            this.prettyPrint = options.prettyPrint !== false;
+            this.xmlDeclaration = options.xmlDeclaration !== false;
+            this.encoding = options.encoding || 'UTF-8';
+        }
+
+        async convert(file) {
+            this.validateFile(file, this.supportedInputs);
+            this.log(`Converting ${file.name} from JSON to XML`);
+
+            const text = await file.text();
+            let jsonData;
+
+            try {
+                jsonData = JSON.parse(text);
+            } catch (error) {
+                throw new Error(`Invalid JSON file: ${error.message}`);
+            }
+
+            const xmlContent = this.jsonToXml(jsonData);
+            const blob = new Blob([xmlContent], { type: this.outputType });
+
+            return {
+                blob,
+                filename: OmniConvertCore.generateFilename(file.name, 'xml'),
+                mimeType: this.outputType,
+                originalSize: file.size,
+                newSize: blob.size,
+                rootElement: this.rootElementName,
+                prettyPrint: this.prettyPrint
+            };
+        }
+
+        jsonToXml(jsonData) {
+            let xml = '';
+            
+            // Add XML declaration
+            if (this.xmlDeclaration) {
+                xml += `<?xml version="1.0" encoding="${this.encoding}"?>\n`;
+            }
+
+            // Convert JSON to XML
+            if (typeof jsonData === 'object' && jsonData !== null) {
+                if (Array.isArray(jsonData)) {
+                    // Root is an array
+                    xml += this.arrayToXml(jsonData, this.rootElementName, 0);
+                } else {
+                    // Root is an object
+                    const hasRootKey = Object.keys(jsonData).length === 1 && 
+                                     typeof jsonData[Object.keys(jsonData)[0]] === 'object';
+                    
+                    if (hasRootKey) {
+                        // Use the single key as root element
+                        const rootKey = Object.keys(jsonData)[0];
+                        xml += this.objectToXml(jsonData[rootKey], rootKey, 0);
+                    } else {
+                        // Wrap in specified root element
+                        xml += this.objectToXml(jsonData, this.rootElementName, 0);
+                    }
+                }
+            } else {
+                // Root is a primitive value
+                xml += this.primitiveToXml(jsonData, this.rootElementName, 0);
+            }
+
+            return xml;
+        }
+
+        objectToXml(obj, elementName, indent = 0) {
+            const indentStr = this.prettyPrint ? '  '.repeat(indent) : '';
+            const newlineStr = this.prettyPrint ? '\n' : '';
+            
+            let xml = `${indentStr}<${this.sanitizeElementName(elementName)}`;
+            let attributes = '';
+            let content = '';
+            let hasTextContent = false;
+
+            // Process object properties
+            for (const [key, value] of Object.entries(obj)) {
+                if (key.startsWith(this.attributePrefix)) {
+                    // This is an attribute
+                    const attrName = key.substring(this.attributePrefix.length);
+                    attributes += ` ${this.sanitizeAttributeName(attrName)}="${this.escapeXml(String(value))}"`;
+                } else if (key === this.textNodeName) {
+                    // This is text content
+                    hasTextContent = true;
+                    content = this.escapeXml(String(value));
+                } else {
+                    // This is a child element
+                    if (Array.isArray(value)) {
+                        content += this.arrayToXml(value, key, indent + 1);
+                    } else if (typeof value === 'object' && value !== null) {
+                        content += this.objectToXml(value, key, indent + 1);
+                    } else {
+                        content += this.primitiveToXml(value, key, indent + 1);
+                    }
+                }
+            }
+
+            xml += attributes;
+
+            if (content === '' && !hasTextContent) {
+                // Self-closing tag
+                xml += `/>${newlineStr}`;
+            } else {
+                xml += '>';
+                
+                if (hasTextContent) {
+                    // Text content only
+                    xml += content;
+                } else {
+                    // Child elements
+                    xml += newlineStr + content + indentStr;
                 }
                 
-                const blob = new Blob([bytes], { type: this.outputFormat });
-                
-                return {
-                    blob,
-                    filename: OmniConvertCore.generateFilename(file.name, 'bin'),
-                    mimeType: this.outputFormat,
-                    originalSize: file.size,
-                    newSize: blob.size,
-                    operation: 'decode'
-                };
-            } catch (error) {
-                throw new Error(`Invalid Base64 data: ${error.message}`);
+                xml += `</${this.sanitizeElementName(elementName)}>${newlineStr}`;
             }
+
+            return xml;
+        }
+
+        arrayToXml(arr, elementName, indent = 0) {
+            let xml = '';
+            
+            for (const item of arr) {
+                if (Array.isArray(item)) {
+                    xml += this.arrayToXml(item, this.arrayElementName, indent);
+                } else if (typeof item === 'object' && item !== null) {
+                    xml += this.objectToXml(item, elementName, indent);
+                } else {
+                    xml += this.primitiveToXml(item, elementName, indent);
+                }
+            }
+
+            return xml;
+        }
+
+        primitiveToXml(value, elementName, indent = 0) {
+            const indentStr = this.prettyPrint ? '  '.repeat(indent) : '';
+            const newlineStr = this.prettyPrint ? '\n' : '';
+            
+            if (value === null || value === undefined) {
+                return `${indentStr}<${this.sanitizeElementName(elementName)}/>${newlineStr}`;
+            }
+
+            const escapedValue = this.escapeXml(String(value));
+            return `${indentStr}<${this.sanitizeElementName(elementName)}>${escapedValue}</${this.sanitizeElementName(elementName)}>${newlineStr}`;
+        }
+
+        sanitizeElementName(name) {
+            // Ensure valid XML element name
+            return name.replace(/[^a-zA-Z0-9\-_\.]/g, '_').replace(/^[^a-zA-Z_]/, '_');
+        }
+
+        sanitizeAttributeName(name) {
+            // Ensure valid XML attribute name
+            return name.replace(/[^a-zA-Z0-9\-_\.]/g, '_').replace(/^[^a-zA-Z_]/, '_');
+        }
+
+        escapeXml(text) {
+            return text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&apos;');
+        }
+
+        // Static helper method for quick conversion
+        static convertJsonString(jsonString, options = {}) {
+            const converter = new JsonToXmlConverter(options);
+            const jsonData = JSON.parse(jsonString);
+            return converter.jsonToXml(jsonData);
         }
     }
 
@@ -772,13 +1570,20 @@
             this.registerConverter('jpg-to-png', JpgToPngConverter);
             this.registerConverter('png-to-jpg', PngToJpgConverter);
             this.registerConverter('webp-to-jpg', WebpToJpgConverter);
+            this.registerConverter('png-to-webp', PngToWebpConverter);
+            this.registerConverter('jpg-to-webp', JpgToWebpConverter);
+            this.registerConverter('heic-to-jpg', HeicToJpgConverter);
+            this.registerConverter('svg-to-png', SvgToPngConverter);
+            this.registerConverter('gif-to-mp4', GifToMp4Converter);
+            this.registerConverter('mp4-to-gif', Mp4ToGifConverter);
             this.registerConverter('jpg-to-pdf', JpgToPdfConverter);
-            this.registerConverter('image-resize', ImageResizer);
             
             // Data converters
             this.registerConverter('csv-to-json', CsvToJsonConverter);
             this.registerConverter('json-to-csv', JsonToCsvConverter);
-            this.registerConverter('base64', Base64Converter);
+            this.registerConverter('xml-to-json', XmlToJsonConverter);
+            this.registerConverter('json-to-xml', JsonToXmlConverter);
+            this.registerConverter('markdown-to-html', MarkdownToHtmlConverter);
         }
 
         // Удобные методы для популярных конвертаций
@@ -799,9 +1604,6 @@
             return converter.convert(files);
         }
 
-        async resizeImages(files, options = {}) {
-            return this.convertFiles('image-resize', files, options);
-        }
 
         async csvToJson(file, options = {}) {
             const converter = this.createConverter('csv-to-json', options);
@@ -813,13 +1615,43 @@
             return converter.convert(file);
         }
 
-        async encodeBase64(file, options = {}) {
-            const converter = this.createConverter('base64', { ...options, operation: 'encode' });
+
+        async pngToWebp(files, options = {}) {
+            return this.convertFiles('png-to-webp', files, options);
+        }
+
+        async jpgToWebp(files, options = {}) {
+            return this.convertFiles('jpg-to-webp', files, options);
+        }
+
+        async heicToJpg(files, options = {}) {
+            return this.convertFiles('heic-to-jpg', files, options);
+        }
+
+        async svgToPng(files, options = {}) {
+            return this.convertFiles('svg-to-png', files, options);
+        }
+
+        async gifToMp4(files, options = {}) {
+            return this.convertFiles('gif-to-mp4', files, options);
+        }
+
+        async xmlToJson(file, options = {}) {
+            const converter = this.createConverter('xml-to-json', options);
             return converter.convert(file);
         }
 
-        async decodeBase64(file, options = {}) {
-            const converter = this.createConverter('base64', { ...options, operation: 'decode' });
+        async markdownToHtml(file, options = {}) {
+            const converter = this.createConverter('markdown-to-html', options);
+            return converter.convert(file);
+        }
+
+        async mp4ToGif(files, options = {}) {
+            return this.convertFiles('mp4-to-gif', files, options);
+        }
+
+        async jsonToXml(file, options = {}) {
+            const converter = this.createConverter('json-to-xml', options);
             return converter.convert(file);
         }
 
@@ -1041,12 +1873,12 @@
         static getSupportedFormats() {
             return {
                 image: {
-                    input: ['jpg', 'jpeg', 'png', 'webp'],
-                    output: ['jpg', 'jpeg', 'png', 'pdf']
+                    input: ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif', 'svg', 'gif'],
+                    output: ['jpg', 'jpeg', 'png', 'webp', 'pdf', 'mp4']
                 },
                 data: {
-                    input: ['csv', 'json'],
-                    output: ['csv', 'json', 'txt']
+                    input: ['csv', 'json', 'xml', 'md', 'markdown'],
+                    output: ['csv', 'json', 'html']
                 }
             };
         }
@@ -1065,11 +1897,18 @@
         window.JpgToPngConverter = JpgToPngConverter;
         window.PngToJpgConverter = PngToJpgConverter;
         window.WebpToJpgConverter = WebpToJpgConverter;
-        window.ImageResizer = ImageResizer;
+        window.PngToWebpConverter = PngToWebpConverter;
+        window.JpgToWebpConverter = JpgToWebpConverter;
+        window.HeicToJpgConverter = HeicToJpgConverter;
+        window.SvgToPngConverter = SvgToPngConverter;
+        window.GifToMp4Converter = GifToMp4Converter;
+        window.Mp4ToGifConverter = Mp4ToGifConverter;
         window.JpgToPdfConverter = JpgToPdfConverter;
         window.CsvToJsonConverter = CsvToJsonConverter;
         window.JsonToCsvConverter = JsonToCsvConverter;
-        window.Base64Converter = Base64Converter;
+        window.XmlToJsonConverter = XmlToJsonConverter;
+        window.JsonToXmlConverter = JsonToXmlConverter;
+        window.MarkdownToHtmlConverter = MarkdownToHtmlConverter;
         
         // Создаем глобальный экземпляр для быстрого использования
         window.omniConvert = new OmniConvert();
