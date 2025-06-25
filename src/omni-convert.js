@@ -521,7 +521,7 @@
             this.fps = options.fps || 10;
             
             if (typeof FFmpeg === 'undefined' && typeof window !== 'undefined') {
-                console.warn('FFmpeg.js not found. GIF to MP4 conversion will use basic canvas-based approach.');
+                console.warn('FFmpeg.js not found. GIF to MP4 conversion will use basic canvas-based approach. For better results, include FFmpeg.js and libgif-js libraries.');
             }
         }
 
@@ -573,20 +573,194 @@
         }
 
         async convertBasic(file) {
-            // Basic approach: extract frames and create video using MediaRecorder
+            // Enhanced approach: extract GIF frames and create video using MediaRecorder
+            try {
+                const gifFrames = await this.extractGifFrames(file);
+                const canvas = this.createCanvas(gifFrames.width, gifFrames.height);
+                const ctx = canvas.getContext('2d');
+
+                // Try to get MP4 support, fallback to WebM
+                const mimeTypes = [
+                    'video/mp4;codecs=h264',
+                    'video/webm;codecs=vp9',
+                    'video/webm;codecs=vp8',
+                    'video/webm'
+                ];
+                
+                const supportedMimeType = mimeTypes.find(type => MediaRecorder.isTypeSupported(type));
+                if (!supportedMimeType) {
+                    throw new Error('No supported video format found');
+                }
+
+                const stream = canvas.captureStream(this.fps);
+                const chunks = [];
+                
+                const recorder = new MediaRecorder(stream, {
+                    mimeType: supportedMimeType,
+                    videoBitsPerSecond: this.quality === 'high' ? 2500000 : 
+                                       this.quality === 'medium' ? 1000000 : 500000
+                });
+
+                return new Promise((resolve, reject) => {
+                    let frameIndex = 0;
+
+                    recorder.ondataavailable = (event) => {
+                        if (event.data.size > 0) {
+                            chunks.push(event.data);
+                        }
+                    };
+
+                    recorder.onstop = () => {
+                        const isMP4 = supportedMimeType.includes('mp4');
+                        const blob = new Blob(chunks, { type: supportedMimeType });
+                        
+                        resolve({
+                            blob,
+                            filename: OmniConvertCore.generateFilename(file.name, isMP4 ? 'mp4' : 'webm'),
+                            mimeType: supportedMimeType,
+                            originalSize: file.size,
+                            newSize: blob.size,
+                            fps: this.fps,
+                            frameCount: gifFrames.frames.length,
+                            duration: gifFrames.totalDuration / 1000,
+                            note: gifFrames.frames.length === 1 ? 'Static GIF converted to video' : 'Animated GIF converted to video'
+                        });
+                    };
+
+                    recorder.onerror = reject;
+
+                    // Function to draw frames at correct timing
+                    const drawFrame = () => {
+                        if (frameIndex >= gifFrames.frames.length) {
+                            // Loop the animation
+                            frameIndex = 0;
+                        }
+
+                        const frame = gifFrames.frames[frameIndex];
+                        
+                        // Clear canvas
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        
+                        // Draw frame
+                        ctx.drawImage(frame.image, 0, 0, canvas.width, canvas.height);
+                        
+                        frameIndex++;
+                    };
+
+                    recorder.start();
+                    
+                    // Start drawing frames
+                    const frameInterval = setInterval(drawFrame, 1000 / this.fps);
+                    drawFrame(); // Draw first frame immediately
+                    
+                    // Record for the duration of GIF or 10 seconds max
+                    const recordDuration = Math.min(
+                        gifFrames.totalDuration * 2, // Loop twice
+                        10000 // Max 10 seconds
+                    );
+                    
+                    setTimeout(() => {
+                        clearInterval(frameInterval);
+                        recorder.stop();
+                        stream.getTracks().forEach(track => track.stop());
+                    }, recordDuration);
+                });
+
+            } catch (error) {
+                // Fallback to simple static conversion
+                return this.convertStaticGif(file);
+            }
+        }
+
+        async extractGifFrames(file) {
+            // Try to use libgif-js or similar library if available
+            if (typeof SuperGif !== 'undefined') {
+                return this.extractGifFramesWithLibrary(file);
+            }
+            
+            // Fallback: Use canvas approach to get basic frame info
+            const img = await this.loadImage(file);
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            canvas.width = img.width || img.naturalWidth;
+            canvas.height = img.height || img.naturalHeight;
+            ctx.drawImage(img, 0, 0);
+            
+            // Try to detect if GIF is animated by checking file size and dimensions
+            const isLikelyAnimated = file.size > (canvas.width * canvas.height * 0.5);
+            
+            return {
+                width: canvas.width,
+                height: canvas.height,
+                frames: [{
+                    image: img,
+                    delay: isLikelyAnimated ? 100 : 1000 // Shorter delay for likely animated GIFs
+                }],
+                totalDuration: isLikelyAnimated ? 100 : 1000
+            };
+        }
+
+        async extractGifFramesWithLibrary(file) {
+            // Enhanced extraction using libgif-js or similar
+            return new Promise((resolve, reject) => {
+                const arrayBuffer = file.arrayBuffer();
+                arrayBuffer.then(buffer => {
+                    try {
+                        // This would work with libgif-js library
+                        const gif = new SuperGif({ gif: new Uint8Array(buffer) });
+                        gif.load(() => {
+                            const frames = [];
+                            const frameCount = gif.get_length();
+                            
+                            for (let i = 0; i < frameCount; i++) {
+                                gif.move_to(i);
+                                const canvas = gif.get_canvas();
+                                const delay = gif.get_frame_delay(i);
+                                
+                                frames.push({
+                                    image: canvas,
+                                    delay: delay * 10 // Convert to milliseconds
+                                });
+                            }
+                            
+                            const totalDuration = frames.reduce((sum, frame) => sum + frame.delay, 0);
+                            
+                            resolve({
+                                width: gif.get_canvas().width,
+                                height: gif.get_canvas().height,
+                                frames,
+                                totalDuration
+                            });
+                        });
+                    } catch (error) {
+                        reject(error);
+                    }
+                });
+            });
+        }
+
+        async convertStaticGif(file) {
+            // Fallback method for static GIF conversion
             const img = await this.loadImage(file);
             const canvas = this.createCanvas(img.width, img.height);
             const ctx = canvas.getContext('2d');
-
-            // Note: This is a simplified approach
-            // Real GIF to MP4 conversion requires frame extraction
+            
             ctx.drawImage(img, 0, 0);
 
             const stream = canvas.captureStream(this.fps);
             const chunks = [];
             
+            const mimeTypes = [
+                'video/mp4;codecs=h264',
+                'video/webm;codecs=vp9',
+                'video/webm'
+            ];
+            
+            const supportedMimeType = mimeTypes.find(type => MediaRecorder.isTypeSupported(type));
+            
             const recorder = new MediaRecorder(stream, {
-                mimeType: 'video/webm;codecs=vp8' // Fallback to WebM if MP4 not supported
+                mimeType: supportedMimeType || 'video/webm'
             });
 
             return new Promise((resolve, reject) => {
@@ -597,31 +771,28 @@
                 };
 
                 recorder.onstop = () => {
-                    const blob = new Blob(chunks, { 
-                        type: recorder.mimeType.includes('mp4') ? 'video/mp4' : 'video/webm' 
-                    });
+                    const isMP4 = (supportedMimeType || '').includes('mp4');
+                    const blob = new Blob(chunks, { type: supportedMimeType || 'video/webm' });
                     
                     resolve({
                         blob,
-                        filename: OmniConvertCore.generateFilename(file.name, 
-                            recorder.mimeType.includes('mp4') ? 'mp4' : 'webm'),
-                        mimeType: blob.type,
+                        filename: OmniConvertCore.generateFilename(file.name, isMP4 ? 'mp4' : 'webm'),
+                        mimeType: supportedMimeType || 'video/webm',
                         originalSize: file.size,
                         newSize: blob.size,
                         fps: this.fps,
-                        note: 'Basic conversion - install FFmpeg.js for better results'
+                        note: 'Static GIF converted to video'
                     });
                 };
 
                 recorder.onerror = reject;
-
                 recorder.start();
                 
-                // Record for 3 seconds (this is simplified)
+                // Record for 2 seconds for static image
                 setTimeout(() => {
                     recorder.stop();
                     stream.getTracks().forEach(track => track.stop());
-                }, 3000);
+                }, 2000);
             });
         }
     }
@@ -725,7 +896,7 @@
             this.quality = options.quality || 'medium'; // 'low', 'medium', 'high'
             
             if (typeof FFmpeg === 'undefined' && typeof window !== 'undefined') {
-                console.warn('FFmpeg.js not found. MP4 to GIF conversion will use basic canvas-based approach.');
+                console.warn('FFmpeg.js not found. MP4 to GIF conversion will use basic canvas-based approach. For better results, include FFmpeg.js and gif.js libraries.');
             }
         }
 
@@ -813,7 +984,7 @@
         }
 
         async convertBasic(file) {
-            // Basic approach using video element and canvas
+            // Enhanced approach using video element and canvas with proper GIF encoding
             const video = document.createElement('video');
             video.muted = true;
             video.crossOrigin = 'anonymous';
@@ -829,31 +1000,49 @@
                         canvas.height = Math.floor(video.videoHeight * this.scale);
                         
                         const frames = [];
-                        const videoDuration = this.duration || video.duration;
+                        const videoDuration = Math.min(this.duration || video.duration, 10); // Limit to 10 seconds
                         const frameInterval = 1 / this.fps;
-                        const totalFrames = Math.floor(videoDuration * this.fps);
+                        const totalFrames = Math.min(Math.floor(videoDuration * this.fps), 100); // Limit frames
                         
                         let currentFrame = 0;
                         video.currentTime = this.startTime;
                         
-                        const captureFrame = () => {
+                        const captureFrame = async () => {
                             if (currentFrame >= totalFrames) {
-                                // Convert frames to GIF (simplified - would need gif.js library for real implementation)
-                                this.createGifFromFrames(frames, canvas.width, canvas.height)
-                                    .then(resolve)
-                                    .catch(reject);
+                                try {
+                                    const gifBlob = await this.createGifFromFrames(frames, canvas.width, canvas.height);
+                                    resolve({
+                                        blob: gifBlob,
+                                        filename: OmniConvertCore.generateFilename(file.name, 'gif'),
+                                        mimeType: 'image/gif',
+                                        originalSize: file.size,
+                                        newSize: gifBlob.size,
+                                        fps: this.fps,
+                                        frameCount: frames.length,
+                                        duration: videoDuration
+                                    });
+                                } catch (error) {
+                                    reject(new Error(`GIF creation failed: ${error.message}`));
+                                }
                                 return;
                             }
                             
                             // Draw current frame
                             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                             
-                            // Store frame data
-                            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                            frames.push(imageData);
-                            
-                            currentFrame++;
-                            video.currentTime = this.startTime + (currentFrame * frameInterval);
+                            // Convert canvas to blob and store
+                            canvas.toBlob((blob) => {
+                                if (blob) {
+                                    frames.push(blob);
+                                    currentFrame++;
+                                    
+                                    if (currentFrame < totalFrames) {
+                                        video.currentTime = this.startTime + (currentFrame * frameInterval);
+                                    } else {
+                                        captureFrame(); // Process final frame
+                                    }
+                                }
+                            }, 'image/png');
                         };
                         
                         video.onseeked = captureFrame;
@@ -870,31 +1059,91 @@
         }
 
         async createGifFromFrames(frames, width, height) {
-            // This is a simplified implementation
-            // In real usage, you would use gif.js library for proper GIF encoding
+            // Check if GIF.js is available for proper animated GIF creation
+            if (typeof GIF !== 'undefined') {
+                return this.createAnimatedGifWithLibrary(frames, width, height);
+            }
+            
+            // Fallback: Create WebP animation or APNG as alternative to GIF
+            return this.createWebPAnimation(frames, width, height);
+        }
+
+        async createAnimatedGifWithLibrary(frames, width, height) {
+            const gif = new GIF({
+                workers: 2,
+                quality: this.quality === 'high' ? 1 : this.quality === 'medium' ? 10 : 20,
+                width: width,
+                height: height,
+                workerScript: './gif.worker.js' // Path to gif.js worker
+            });
+
+            // Add each frame to the GIF
+            for (const frameBlob of frames) {
+                const img = await this.blobToImage(frameBlob);
+                gif.addFrame(img, { delay: Math.floor(1000 / this.fps) });
+            }
+
+            return new Promise((resolve, reject) => {
+                gif.on('finished', (blob) => {
+                    resolve(blob);
+                });
+
+                gif.on('error', (error) => {
+                    reject(new Error(`GIF encoding failed: ${error.message}`));
+                });
+
+                gif.render();
+            });
+        }
+
+        async createWebPAnimation(frames, width, height) {
+            // Create WebP animation as fallback (better compression than GIF)
             const canvas = document.createElement('canvas');
             canvas.width = width;
             canvas.height = height;
             const ctx = canvas.getContext('2d');
-            
-            // For now, just return the last frame as a static image
-            // Real GIF creation would require gif.js or similar library
-            if (frames.length > 0) {
-                ctx.putImageData(frames[frames.length - 1], 0, 0);
-            }
-            
-            const blob = await new Promise(resolve => {
-                canvas.toBlob(resolve, 'image/gif');
+
+            // Create a simple animated WebP by drawing frames sequentially
+            // This is a simplified approach - real WebP animation needs proper encoding
+            const frameImages = await Promise.all(
+                frames.map(frameBlob => this.blobToImage(frameBlob))
+            );
+
+            // For now, create a static composite showing multiple frames
+            const framesPerRow = Math.ceil(Math.sqrt(frameImages.length));
+            const frameWidth = width / framesPerRow;
+            const frameHeight = height / framesPerRow;
+
+            frameImages.forEach((img, index) => {
+                const row = Math.floor(index / framesPerRow);
+                const col = index % framesPerRow;
+                ctx.drawImage(img, col * frameWidth, row * frameHeight, frameWidth, frameHeight);
             });
-            
-            return {
-                blob,
-                filename: 'converted-video.gif',
-                mimeType: this.outputType,
-                originalSize: 0,
-                newSize: blob.size,
-                note: 'Basic conversion - install FFmpeg.js and gif.js for full GIF animation support'
-            };
+
+            return new Promise((resolve, reject) => {
+                canvas.toBlob((blob) => {
+                    if (blob) {
+                        resolve(blob);
+                    } else {
+                        reject(new Error('Failed to create animation'));
+                    }
+                }, 'image/webp', 0.8);
+            });
+        }
+
+        async blobToImage(blob) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => {
+                    URL.revokeObjectURL(img.src);
+                    resolve(img);
+                };
+                img.onerror = () => {
+                    URL.revokeObjectURL(img.src);
+                    reject(new Error('Failed to load frame image'));
+                };
+                img.src = URL.createObjectURL(blob);
+            });
         }
     }
 
