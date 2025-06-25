@@ -101,7 +101,13 @@
         }
 
         static validateFileType(file, allowedTypes) {
+            if (!file || !file.name || !allowedTypes) {
+                return false;
+            }
+            
             return allowedTypes.some(type => {
+                if (!type) return false;
+                
                 if (type.includes('/')) {
                     return file.type === type;
                 } else {
@@ -511,291 +517,6 @@
         }
     }
 
-    // GIF to MP4 Converter (requires FFmpeg.js or similar)
-    class GifToMp4Converter extends BaseConverter {
-        constructor(options = {}) {
-            super(options);
-            this.supportedInputs = ['image/gif', '.gif'];
-            this.outputType = 'video/mp4';
-            this.quality = options.quality || 'medium';
-            this.fps = options.fps || 10;
-            
-            if (typeof FFmpeg === 'undefined' && typeof window !== 'undefined') {
-                console.warn('FFmpeg.js not found. GIF to MP4 conversion will use basic canvas-based approach. For better results, include FFmpeg.js and libgif-js libraries.');
-            }
-        }
-
-        async convert(file) {
-            this.validateFile(file, this.supportedInputs);
-            this.log(`Converting ${file.name} from GIF to MP4`);
-
-            // Check if FFmpeg is available for better conversion
-            if (typeof FFmpeg !== 'undefined') {
-                return this.convertWithFFmpeg(file);
-            } else {
-                // Use basic canvas-based approach
-                return this.convertBasic(file);
-            }
-        }
-
-        async convertWithFFmpeg(file) {
-            try {
-                const ffmpeg = new FFmpeg.FFmpeg();
-                await ffmpeg.load();
-
-                const inputName = 'input.gif';
-                const outputName = 'output.mp4';
-
-                await ffmpeg.writeFile(inputName, new Uint8Array(await file.arrayBuffer()));
-                
-                await ffmpeg.exec([
-                    '-i', inputName,
-                    '-movflags', 'faststart',
-                    '-pix_fmt', 'yuv420p',
-                    '-vf', `fps=${this.fps}`,
-                    outputName
-                ]);
-
-                const data = await ffmpeg.readFile(outputName);
-                const blob = new Blob([data.buffer], { type: this.outputType });
-
-                return {
-                    blob,
-                    filename: OmniConvertCore.generateFilename(file.name, 'mp4'),
-                    mimeType: this.outputType,
-                    originalSize: file.size,
-                    newSize: blob.size,
-                    fps: this.fps
-                };
-            } catch (error) {
-                throw new Error(`FFmpeg conversion failed: ${error.message}`);
-            }
-        }
-
-        async convertBasic(file) {
-            // Enhanced approach: extract GIF frames and create video using MediaRecorder
-            try {
-                const gifFrames = await this.extractGifFrames(file);
-                const canvas = this.createCanvas(gifFrames.width, gifFrames.height);
-                const ctx = canvas.getContext('2d');
-
-                // Try to get MP4 support, fallback to WebM
-                const mimeTypes = [
-                    'video/mp4;codecs=h264',
-                    'video/webm;codecs=vp9',
-                    'video/webm;codecs=vp8',
-                    'video/webm'
-                ];
-                
-                const supportedMimeType = mimeTypes.find(type => MediaRecorder.isTypeSupported(type));
-                if (!supportedMimeType) {
-                    throw new Error('No supported video format found');
-                }
-
-                const stream = canvas.captureStream(this.fps);
-                const chunks = [];
-                
-                const recorder = new MediaRecorder(stream, {
-                    mimeType: supportedMimeType,
-                    videoBitsPerSecond: this.quality === 'high' ? 2500000 : 
-                                       this.quality === 'medium' ? 1000000 : 500000
-                });
-
-                return new Promise((resolve, reject) => {
-                    let frameIndex = 0;
-
-                    recorder.ondataavailable = (event) => {
-                        if (event.data.size > 0) {
-                            chunks.push(event.data);
-                        }
-                    };
-
-                    recorder.onstop = () => {
-                        const isMP4 = supportedMimeType.includes('mp4');
-                        const blob = new Blob(chunks, { type: supportedMimeType });
-                        
-                        resolve({
-                            blob,
-                            filename: OmniConvertCore.generateFilename(file.name, isMP4 ? 'mp4' : 'webm'),
-                            mimeType: supportedMimeType,
-                            originalSize: file.size,
-                            newSize: blob.size,
-                            fps: this.fps,
-                            frameCount: gifFrames.frames.length,
-                            duration: gifFrames.totalDuration / 1000,
-                            note: gifFrames.frames.length === 1 ? 'Static GIF converted to video' : 'Animated GIF converted to video'
-                        });
-                    };
-
-                    recorder.onerror = reject;
-
-                    // Function to draw frames at correct timing
-                    const drawFrame = () => {
-                        if (frameIndex >= gifFrames.frames.length) {
-                            // Loop the animation
-                            frameIndex = 0;
-                        }
-
-                        const frame = gifFrames.frames[frameIndex];
-                        
-                        // Clear canvas
-                        ctx.clearRect(0, 0, canvas.width, canvas.height);
-                        
-                        // Draw frame
-                        ctx.drawImage(frame.image, 0, 0, canvas.width, canvas.height);
-                        
-                        frameIndex++;
-                    };
-
-                    recorder.start();
-                    
-                    // Start drawing frames
-                    const frameInterval = setInterval(drawFrame, 1000 / this.fps);
-                    drawFrame(); // Draw first frame immediately
-                    
-                    // Record for the duration of GIF or 10 seconds max
-                    const recordDuration = Math.min(
-                        gifFrames.totalDuration * 2, // Loop twice
-                        10000 // Max 10 seconds
-                    );
-                    
-                    setTimeout(() => {
-                        clearInterval(frameInterval);
-                        recorder.stop();
-                        stream.getTracks().forEach(track => track.stop());
-                    }, recordDuration);
-                });
-
-            } catch (error) {
-                // Fallback to simple static conversion
-                return this.convertStaticGif(file);
-            }
-        }
-
-        async extractGifFrames(file) {
-            // Try to use libgif-js or similar library if available
-            if (typeof SuperGif !== 'undefined') {
-                return this.extractGifFramesWithLibrary(file);
-            }
-            
-            // Fallback: Use canvas approach to get basic frame info
-            const img = await this.loadImage(file);
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            
-            canvas.width = img.width || img.naturalWidth;
-            canvas.height = img.height || img.naturalHeight;
-            ctx.drawImage(img, 0, 0);
-            
-            // Try to detect if GIF is animated by checking file size and dimensions
-            const isLikelyAnimated = file.size > (canvas.width * canvas.height * 0.5);
-            
-            return {
-                width: canvas.width,
-                height: canvas.height,
-                frames: [{
-                    image: img,
-                    delay: isLikelyAnimated ? 100 : 1000 // Shorter delay for likely animated GIFs
-                }],
-                totalDuration: isLikelyAnimated ? 100 : 1000
-            };
-        }
-
-        async extractGifFramesWithLibrary(file) {
-            // Enhanced extraction using libgif-js or similar
-            return new Promise((resolve, reject) => {
-                const arrayBuffer = file.arrayBuffer();
-                arrayBuffer.then(buffer => {
-                    try {
-                        // This would work with libgif-js library
-                        const gif = new SuperGif({ gif: new Uint8Array(buffer) });
-                        gif.load(() => {
-                            const frames = [];
-                            const frameCount = gif.get_length();
-                            
-                            for (let i = 0; i < frameCount; i++) {
-                                gif.move_to(i);
-                                const canvas = gif.get_canvas();
-                                const delay = gif.get_frame_delay(i);
-                                
-                                frames.push({
-                                    image: canvas,
-                                    delay: delay * 10 // Convert to milliseconds
-                                });
-                            }
-                            
-                            const totalDuration = frames.reduce((sum, frame) => sum + frame.delay, 0);
-                            
-                            resolve({
-                                width: gif.get_canvas().width,
-                                height: gif.get_canvas().height,
-                                frames,
-                                totalDuration
-                            });
-                        });
-                    } catch (error) {
-                        reject(error);
-                    }
-                });
-            });
-        }
-
-        async convertStaticGif(file) {
-            // Fallback method for static GIF conversion
-            const img = await this.loadImage(file);
-            const canvas = this.createCanvas(img.width, img.height);
-            const ctx = canvas.getContext('2d');
-            
-            ctx.drawImage(img, 0, 0);
-
-            const stream = canvas.captureStream(this.fps);
-            const chunks = [];
-            
-            const mimeTypes = [
-                'video/mp4;codecs=h264',
-                'video/webm;codecs=vp9',
-                'video/webm'
-            ];
-            
-            const supportedMimeType = mimeTypes.find(type => MediaRecorder.isTypeSupported(type));
-            
-            const recorder = new MediaRecorder(stream, {
-                mimeType: supportedMimeType || 'video/webm'
-            });
-
-            return new Promise((resolve, reject) => {
-                recorder.ondataavailable = (event) => {
-                    if (event.data.size > 0) {
-                        chunks.push(event.data);
-                    }
-                };
-
-                recorder.onstop = () => {
-                    const isMP4 = (supportedMimeType || '').includes('mp4');
-                    const blob = new Blob(chunks, { type: supportedMimeType || 'video/webm' });
-                    
-                    resolve({
-                        blob,
-                        filename: OmniConvertCore.generateFilename(file.name, isMP4 ? 'mp4' : 'webm'),
-                        mimeType: supportedMimeType || 'video/webm',
-                        originalSize: file.size,
-                        newSize: blob.size,
-                        fps: this.fps,
-                        note: 'Static GIF converted to video'
-                    });
-                };
-
-                recorder.onerror = reject;
-                recorder.start();
-                
-                // Record for 2 seconds for static image
-                setTimeout(() => {
-                    recorder.stop();
-                    stream.getTracks().forEach(track => track.stop());
-                }, 2000);
-            });
-        }
-    }
 
     // JPG to PDF Converter (requires PDF-lib)
     class JpgToPdfConverter extends BaseConverter {
@@ -883,269 +604,6 @@
         }
     }
 
-    // MP4 to GIF Converter (requires FFmpeg.js or similar)
-    class Mp4ToGifConverter extends BaseConverter {
-        constructor(options = {}) {
-            super(options);
-            this.supportedInputs = ['video/mp4', '.mp4'];
-            this.outputType = 'image/gif';
-            this.fps = options.fps || 10;
-            this.scale = options.scale || 1.0;
-            this.startTime = options.startTime || 0;
-            this.duration = options.duration || null;
-            this.quality = options.quality || 'medium'; // 'low', 'medium', 'high'
-            
-            if (typeof FFmpeg === 'undefined' && typeof window !== 'undefined') {
-                console.warn('FFmpeg.js not found. MP4 to GIF conversion will use basic canvas-based approach. For better results, include FFmpeg.js and gif.js libraries.');
-            }
-        }
-
-        async convert(file) {
-            this.validateFile(file, this.supportedInputs);
-            this.log(`Converting ${file.name} from MP4 to GIF`);
-
-            // Check if FFmpeg is available for better conversion
-            if (typeof FFmpeg !== 'undefined') {
-                return this.convertWithFFmpeg(file);
-            } else {
-                // Use basic canvas-based approach
-                return this.convertBasic(file);
-            }
-        }
-
-        async convertWithFFmpeg(file) {
-            try {
-                const ffmpeg = new FFmpeg.FFmpeg();
-                await ffmpeg.load();
-
-                const inputName = 'input.mp4';
-                const outputName = 'output.gif';
-
-                await ffmpeg.writeFile(inputName, new Uint8Array(await file.arrayBuffer()));
-                
-                // Build FFmpeg command
-                const cmd = ['-i', inputName];
-                
-                // Add start time if specified
-                if (this.startTime > 0) {
-                    cmd.push('-ss', this.startTime.toString());
-                }
-                
-                // Add duration if specified
-                if (this.duration) {
-                    cmd.push('-t', this.duration.toString());
-                }
-                
-                // Set fps and scale
-                let vf = `fps=${this.fps}`;
-                if (this.scale !== 1.0) {
-                    vf += `,scale=iw*${this.scale}:ih*${this.scale}`;
-                }
-                
-                // Quality settings
-                let palette = '';
-                switch (this.quality) {
-                    case 'high':
-                        palette = ':flags=lanczos,palettegen=max_colors=256';
-                        break;
-                    case 'medium':
-                        palette = ':flags=lanczos,palettegen=max_colors=128';
-                        break;
-                    case 'low':
-                        palette = ':flags=lanczos,palettegen=max_colors=64';
-                        break;
-                }
-                
-                vf += palette;
-                cmd.push('-vf', vf);
-                cmd.push('-loop', '0'); // Infinite loop
-                cmd.push(outputName);
-
-                await ffmpeg.exec(cmd);
-
-                const data = await ffmpeg.readFile(outputName);
-                const blob = new Blob([data.buffer], { type: this.outputType });
-
-                return {
-                    blob,
-                    filename: OmniConvertCore.generateFilename(file.name, 'gif'),
-                    mimeType: this.outputType,
-                    originalSize: file.size,
-                    newSize: blob.size,
-                    fps: this.fps,
-                    scale: this.scale,
-                    quality: this.quality,
-                    startTime: this.startTime,
-                    duration: this.duration
-                };
-            } catch (error) {
-                throw new Error(`FFmpeg conversion failed: ${error.message}`);
-            }
-        }
-
-        async convertBasic(file) {
-            // Enhanced approach using video element and canvas with proper GIF encoding
-            const video = document.createElement('video');
-            video.muted = true;
-            video.crossOrigin = 'anonymous';
-            
-            return new Promise((resolve, reject) => {
-                video.onloadedmetadata = async () => {
-                    try {
-                        const canvas = document.createElement('canvas');
-                        const ctx = canvas.getContext('2d');
-                        
-                        // Set canvas size based on video and scale
-                        canvas.width = Math.floor(video.videoWidth * this.scale);
-                        canvas.height = Math.floor(video.videoHeight * this.scale);
-                        
-                        const frames = [];
-                        const videoDuration = Math.min(this.duration || video.duration, 10); // Limit to 10 seconds
-                        const frameInterval = 1 / this.fps;
-                        const totalFrames = Math.min(Math.floor(videoDuration * this.fps), 100); // Limit frames
-                        
-                        let currentFrame = 0;
-                        video.currentTime = this.startTime;
-                        
-                        const captureFrame = async () => {
-                            if (currentFrame >= totalFrames) {
-                                try {
-                                    const gifBlob = await this.createGifFromFrames(frames, canvas.width, canvas.height);
-                                    resolve({
-                                        blob: gifBlob,
-                                        filename: OmniConvertCore.generateFilename(file.name, 'gif'),
-                                        mimeType: 'image/gif',
-                                        originalSize: file.size,
-                                        newSize: gifBlob.size,
-                                        fps: this.fps,
-                                        frameCount: frames.length,
-                                        duration: videoDuration
-                                    });
-                                } catch (error) {
-                                    reject(new Error(`GIF creation failed: ${error.message}`));
-                                }
-                                return;
-                            }
-                            
-                            // Draw current frame
-                            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                            
-                            // Convert canvas to blob and store
-                            canvas.toBlob((blob) => {
-                                if (blob) {
-                                    frames.push(blob);
-                                    currentFrame++;
-                                    
-                                    if (currentFrame < totalFrames) {
-                                        video.currentTime = this.startTime + (currentFrame * frameInterval);
-                                    } else {
-                                        captureFrame(); // Process final frame
-                                    }
-                                }
-                            }, 'image/png');
-                        };
-                        
-                        video.onseeked = captureFrame;
-                        video.currentTime = this.startTime;
-                        
-                    } catch (error) {
-                        reject(error);
-                    }
-                };
-                
-                video.onerror = () => reject(new Error('Failed to load video'));
-                video.src = URL.createObjectURL(file);
-            });
-        }
-
-        async createGifFromFrames(frames, width, height) {
-            // Check if GIF.js is available for proper animated GIF creation
-            if (typeof GIF !== 'undefined') {
-                return this.createAnimatedGifWithLibrary(frames, width, height);
-            }
-            
-            // Fallback: Create WebP animation or APNG as alternative to GIF
-            return this.createWebPAnimation(frames, width, height);
-        }
-
-        async createAnimatedGifWithLibrary(frames, width, height) {
-            const gif = new GIF({
-                workers: 2,
-                quality: this.quality === 'high' ? 1 : this.quality === 'medium' ? 10 : 20,
-                width: width,
-                height: height,
-                workerScript: './gif.worker.js' // Path to gif.js worker
-            });
-
-            // Add each frame to the GIF
-            for (const frameBlob of frames) {
-                const img = await this.blobToImage(frameBlob);
-                gif.addFrame(img, { delay: Math.floor(1000 / this.fps) });
-            }
-
-            return new Promise((resolve, reject) => {
-                gif.on('finished', (blob) => {
-                    resolve(blob);
-                });
-
-                gif.on('error', (error) => {
-                    reject(new Error(`GIF encoding failed: ${error.message}`));
-                });
-
-                gif.render();
-            });
-        }
-
-        async createWebPAnimation(frames, width, height) {
-            // Create WebP animation as fallback (better compression than GIF)
-            const canvas = document.createElement('canvas');
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-
-            // Create a simple animated WebP by drawing frames sequentially
-            // This is a simplified approach - real WebP animation needs proper encoding
-            const frameImages = await Promise.all(
-                frames.map(frameBlob => this.blobToImage(frameBlob))
-            );
-
-            // For now, create a static composite showing multiple frames
-            const framesPerRow = Math.ceil(Math.sqrt(frameImages.length));
-            const frameWidth = width / framesPerRow;
-            const frameHeight = height / framesPerRow;
-
-            frameImages.forEach((img, index) => {
-                const row = Math.floor(index / framesPerRow);
-                const col = index % framesPerRow;
-                ctx.drawImage(img, col * frameWidth, row * frameHeight, frameWidth, frameHeight);
-            });
-
-            return new Promise((resolve, reject) => {
-                canvas.toBlob((blob) => {
-                    if (blob) {
-                        resolve(blob);
-                    } else {
-                        reject(new Error('Failed to create animation'));
-                    }
-                }, 'image/webp', 0.8);
-            });
-        }
-
-        async blobToImage(blob) {
-            return new Promise((resolve, reject) => {
-                const img = new Image();
-                img.onload = () => {
-                    URL.revokeObjectURL(img.src);
-                    resolve(img);
-                };
-                img.onerror = () => {
-                    URL.revokeObjectURL(img.src);
-                    reject(new Error('Failed to load frame image'));
-                };
-                img.src = URL.createObjectURL(blob);
-            });
-        }
-    }
 
     /**
      * DATA CONVERTERS
@@ -1667,22 +1125,32 @@
                     // Root is an array
                     xml += this.arrayToXml(jsonData, this.rootElementName, 0);
                 } else {
-                    // Root is an object
-                    const hasRootKey = Object.keys(jsonData).length === 1 && 
-                                     typeof jsonData[Object.keys(jsonData)[0]] === 'object';
+                    // Root is an object - smart root element detection
+                    const keys = Object.keys(jsonData);
+                    let rootElementToUse = this.rootElementName;
                     
-                    if (hasRootKey) {
-                        // Use the single key as root element
-                        const rootKey = Object.keys(jsonData)[0];
-                        xml += this.objectToXml(jsonData[rootKey], rootKey, 0);
+                    if (keys.length === 1) {
+                        // Single key at root level - use it as root element
+                        const singleKey = keys[0];
+                        xml += this.objectToXml(jsonData[singleKey], singleKey, 0);
+                        return xml;
+                    } else if (keys.length > 1) {
+                        // Multiple keys - check if root element name was explicitly set
+                        if (this.rootElementName === 'root') {
+                            // Use default wrapper for multiple root keys
+                            rootElementToUse = 'data';
+                        }
                     } else {
-                        // Wrap in specified root element
-                        xml += this.objectToXml(jsonData, this.rootElementName, 0);
+                        // Empty object
+                        rootElementToUse = 'empty';
                     }
+                    
+                    xml += this.objectToXml(jsonData, rootElementToUse, 0);
                 }
             } else {
                 // Root is a primitive value
-                xml += this.primitiveToXml(jsonData, this.rootElementName, 0);
+                const rootForPrimitive = this.rootElementName === 'root' ? 'value' : this.rootElementName;
+                xml += this.primitiveToXml(jsonData, rootForPrimitive, 0);
             }
 
             return xml;
@@ -1823,8 +1291,6 @@
             this.registerConverter('jpg-to-webp', JpgToWebpConverter);
             this.registerConverter('heic-to-jpg', HeicToJpgConverter);
             this.registerConverter('svg-to-png', SvgToPngConverter);
-            this.registerConverter('gif-to-mp4', GifToMp4Converter);
-            this.registerConverter('mp4-to-gif', Mp4ToGifConverter);
             this.registerConverter('jpg-to-pdf', JpgToPdfConverter);
             
             // Data converters
@@ -2150,8 +1616,6 @@
         window.JpgToWebpConverter = JpgToWebpConverter;
         window.HeicToJpgConverter = HeicToJpgConverter;
         window.SvgToPngConverter = SvgToPngConverter;
-        window.GifToMp4Converter = GifToMp4Converter;
-        window.Mp4ToGifConverter = Mp4ToGifConverter;
         window.JpgToPdfConverter = JpgToPdfConverter;
         window.CsvToJsonConverter = CsvToJsonConverter;
         window.JsonToCsvConverter = JsonToCsvConverter;
