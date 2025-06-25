@@ -109,6 +109,13 @@
                 if (!type) return false;
                 
                 if (type.includes('/')) {
+                    // For JSON files, be more lenient with MIME types
+                    if (type === 'application/json') {
+                        return file.type === type || 
+                               file.type === 'text/plain' || 
+                               file.type === '' || 
+                               file.name.toLowerCase().endsWith('.json');
+                    }
                     return file.type === type;
                 } else {
                     return file.name.toLowerCase().endsWith(type.toLowerCase());
