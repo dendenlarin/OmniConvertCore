@@ -11,7 +11,6 @@ Complete library for file conversion in the browser without a server.
 - **JPG → WebP** - web optimization
 - **HEIC → JPG** - photos from Apple devices (requires heic2any)
 - **SVG → PNG** - vector graphics rasterization with size settings
-- **GIF ↔ MP4** - animated file conversion in both directions
 - **JPG → PDF** - create PDF from images
 
 ### 📊 Data Conversion
@@ -44,8 +43,6 @@ await converter.pngToWebp(files);         // PNG → WebP
 await converter.jpgToWebp(files);         // JPG → WebP
 await converter.heicToJpg(files);         // HEIC → JPG
 await converter.svgToPng(files);          // SVG → PNG
-await converter.gifToMp4(files);          // GIF → MP4
-await converter.mp4ToGif(files);          // MP4 → GIF
 await converter.jpgToPdf(files);          // JPG → PDF
 
 // Data conversion
@@ -120,24 +117,14 @@ await converter.svgToPng(files, {
 });
 ```
 
-#### GIF and MP4 conversion
+#### JPG to PDF conversion
 ```javascript
-// GIF to MP4
-await converter.gifToMp4(files, { 
-    fps: 15,                    // Frame rate
-    quality: 'medium'           // Quality: 'low', 'medium', 'high'
+await converter.jpgToPdf(files, {
+    pageSize: 'A4',             // Page size: 'A4', 'Letter', etc.
+    margin: 20,                 // Margin in points
+    autoScale: true,            // Auto-scale images to fit page
+    orientation: 'portrait'     // 'portrait' or 'landscape'
 });
-
-// MP4 to GIF
-await converter.mp4ToGif(files, {
-    fps: 10,                    // Frame rate for GIF
-    width: 480,                 // GIF width
-    startTime: 0,               // Start time (seconds)
-    duration: 5                 // Duration (seconds)
-});
-
-// For better results, include FFmpeg.js:
-// <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.7/dist/umd/ffmpeg.js"></script>
 ```
 
 ### Data Conversion
@@ -287,14 +274,14 @@ const result = await imageConverter.convert(file);
 
 ### Optional
 - **heic2any** - for HEIC file conversion
-- **FFmpeg.js** - for advanced video/GIF work
+- **PDF-lib** - for JPG to PDF conversion
 
 ```html
 <!-- For HEIC support -->
 <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
 
-<!-- For enhanced video work -->
-<script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.7/dist/umd/ffmpeg.js"></script>
+<!-- For PDF support -->
+<script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 ```
 
 ## License
