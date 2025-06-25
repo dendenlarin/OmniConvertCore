@@ -1,48 +1,42 @@
 # OmniConvert Core
 
-Полная библиотека для конвертации файлов в браузере без сервера.
+Complete library for file conversion in the browser without a server.
 
-## Возможности
+## Features
 
-### 🖼️ Конвертация изображений
-- **JPG ↔ PNG** - взаимная конвертация с поддержкой прозрачности
-- **WebP ↔ JPG** - для совместимости и оптимизации
-- **PNG → WebP** - современный формат с лучшим сжатием
-- **JPG → WebP** - оптимизация для веб
-- **HEIC → JPG** - фото с Apple устройств (требует heic2any)
-- **SVG → PNG** - растеризация векторной графики с настройкой размеров
-- **GIF ↔ MP4** - конвертация анимированных файлов в обе стороны
-- **JPG → PDF** - создание PDF из изображений
+### 🖼️ Image Conversion
+- **JPG ↔ PNG** - bidirectional conversion with transparency support
+- **WebP ↔ JPG** - for compatibility and optimization
+- **PNG → WebP** - modern format with better compression
+- **JPG → WebP** - web optimization
+- **HEIC → JPG** - photos from Apple devices (requires heic2any)
+- **SVG → PNG** - vector graphics rasterization with size settings
+- **GIF ↔ MP4** - animated file conversion in both directions
+- **JPG → PDF** - create PDF from images
 
-### 📊 Конвертация данных
-- **CSV ↔ JSON** - взаимная конвертация с поддержкой заголовков
-- **XML ↔ JSON** - двусторонняя конвертация структурированных данных
-- **Markdown → HTML** - рендеринг Markdown с поддержкой таблиц и расширений
+### 📊 Data Conversion
+- **CSV ↔ JSON** - bidirectional conversion with header support
+- **XML ↔ JSON** - two-way structured data conversion
+- **Markdown → HTML** - Markdown rendering with table and extension support
 
-### 🔧 Утилиты
-- **Пакетная обработка** - конвертация множества файлов
-- **Drag & Drop** - поддержка перетаскивания файлов
-- **Автоматический UI** - создание интерфейса конвертера
-- **Прогресс и логирование** - отслеживание процесса конвертации
-
-## Быстрый старт
+## Quick Start
 
 ```html
 <script src="src/omni-convert.js"></script>
 <script>
     const converter = new OmniConvert();
     
-    // Конвертация JPG в PNG
+    // Convert JPG to PNG
     converter.jpgToPng(files).then(result => {
-        console.log('Готово!', result);
+        console.log('Done!', result);
     });
 </script>
 ```
 
-## Все методы конвертации
+## All Conversion Methods
 
 ```javascript
-// Конвертация изображений
+// Image conversion
 await converter.jpgToPng(files);          // JPG → PNG
 await converter.pngToJpg(files);          // PNG → JPG
 await converter.webpToJpg(files);         // WebP → JPG
@@ -54,7 +48,7 @@ await converter.gifToMp4(files);          // GIF → MP4
 await converter.mp4ToGif(files);          // MP4 → GIF
 await converter.jpgToPdf(files);          // JPG → PDF
 
-// Конвертация данных
+// Data conversion
 await converter.csvToJson(file);          // CSV → JSON
 await converter.jsonToCsv(file);          // JSON → CSV
 await converter.xmlToJson(file);          // XML → JSON
@@ -62,78 +56,53 @@ await converter.jsonToXml(file);          // JSON → XML
 await converter.markdownToHtml(file);     // Markdown → HTML
 ```
 
-## Конфигурация
+## Configuration
 
 ```javascript
 const converter = new OmniConvert({
-    enableLogging: true,        // Включить логи
-    autoDownload: true,         // Автоскачивание результатов
+    enableLogging: true,        // Enable logging
+    autoDownload: true,         // Auto-download results
     progressCallback: (percentage, message) => {
         console.log(`${percentage}%: ${message}`);
     },
     errorCallback: (message, error) => {
-        console.error('Ошибка:', message, error);
+        console.error('Error:', message, error);
     },
     successCallback: (message, data) => {
-        console.log('Успех:', message, data);
+        console.log('Success:', message, data);
     }
 });
 ```
 
-## Drag & Drop интерфейс
+## Detailed Conversion Options
 
-```javascript
-// Настройка drag & drop для элемента
-converter.setupDragDrop('#drop-zone', {
-    onDrop: (files) => converter.jpgToPng(files),
-    acceptedTypes: ['image/jpeg', 'image/png'],
-    dropText: 'Перетащите файлы сюда',
-    hoverText: 'Отпустите файлы для конвертации'
-});
-```
+### Image Conversion
 
-## Автоматическое создание UI
-
-```javascript
-// Создание готового интерфейса конвертера
-converter.createUI('container', 'jpg-to-png', {
-    title: 'Конвертер JPG в PNG',
-    description: 'Конвертируйте JPG изображения в PNG формат',
-    acceptedTypes: ['image/jpeg'],
-    showProgress: true,
-    showPreview: true
-});
-```
-
-## Детальные опции конвертации
-
-### Конвертация изображений
-
-#### PNG в JPG с настройкой фона
+#### PNG to JPG with background setting
 ```javascript
 await converter.pngToJpg(files, {
-    backgroundColor: '#ffffff',  // Цвет фона для прозрачных областей
-    quality: 0.9                 // Качество JPG (0.1-1.0)
+    backgroundColor: '#ffffff',  // Background color for transparent areas
+    quality: 0.9                 // JPG quality (0.1-1.0)
 });
 ```
 
-#### WebP конвертация с качеством
+#### WebP conversion with quality
 ```javascript
-// PNG в WebP
+// PNG to WebP
 await converter.pngToWebp(files, { 
-    quality: 0.8,               // Качество сжатия
-    lossless: false             // Без потерь (игнорирует quality)
+    quality: 0.8,               // Compression quality
+    lossless: false             // Lossless (ignores quality)
 });
 
-// JPG в WebP
+// JPG to WebP
 await converter.jpgToWebp(files, { 
     quality: 0.9 
 });
 ```
 
-#### HEIC конвертация
+#### HEIC conversion
 ```javascript
-// Требует подключения heic2any библиотеки
+// Requires heic2any library
 // <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
 await converter.heicToJpg(files, { 
     quality: 0.9,
@@ -141,167 +110,143 @@ await converter.heicToJpg(files, {
 });
 ```
 
-#### SVG в PNG с настройками
+#### SVG to PNG with settings
 ```javascript
 await converter.svgToPng(files, {
-    width: 512,                 // Ширина результата
-    height: 512,                // Высота результата
-    scale: 2,                   // Масштаб для высокого разрешения
-    backgroundColor: '#ffffff'   // Фон SVG
+    width: 512,                 // Result width
+    height: 512,                // Result height
+    scale: 2,                   // Scale for high resolution
+    backgroundColor: '#ffffff'   // SVG background
 });
 ```
 
-#### GIF и MP4 конвертация
+#### GIF and MP4 conversion
 ```javascript
-// GIF в MP4
+// GIF to MP4
 await converter.gifToMp4(files, { 
-    fps: 15,                    // Частота кадров
-    quality: 'medium'           // Качество: 'low', 'medium', 'high'
+    fps: 15,                    // Frame rate
+    quality: 'medium'           // Quality: 'low', 'medium', 'high'
 });
 
-// MP4 в GIF
+// MP4 to GIF
 await converter.mp4ToGif(files, {
-    fps: 10,                    // Частота кадров для GIF
-    width: 480,                 // Ширина GIF
-    startTime: 0,               // Начальное время (секунды)
-    duration: 5                 // Длительность (секунды)
+    fps: 10,                    // Frame rate for GIF
+    width: 480,                 // GIF width
+    startTime: 0,               // Start time (seconds)
+    duration: 5                 // Duration (seconds)
 });
 
-// Для лучшего результата подключите FFmpeg.js:
+// For better results, include FFmpeg.js:
 // <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.7/dist/umd/ffmpeg.js"></script>
 ```
 
-### Конвертация данных
+### Data Conversion
 
-#### CSV в JSON
+#### CSV to JSON
 ```javascript
 await converter.csvToJson(file, {
-    hasHeaders: true,           // Первая строка содержит заголовки
-    delimiter: ',',             // Разделитель CSV
-    encoding: 'utf-8',          // Кодировка файла
-    skipEmptyLines: true        // Пропускать пустые строки
+    hasHeaders: true,           // First row contains headers
+    delimiter: ',',             // CSV delimiter
+    encoding: 'utf-8',          // File encoding
+    skipEmptyLines: true        // Skip empty lines
 });
 ```
 
-#### JSON в CSV
+#### JSON to CSV
 ```javascript
 await converter.jsonToCsv(file, {
-    headers: ['name', 'age'],   // Явно указать заголовки
-    delimiter: ',',             // Разделитель CSV
-    includeHeaders: true,       // Включить заголовки в результат
-    flattenObjects: true        // Разворачивать вложенные объекты
+    headers: ['name', 'age'],   // Explicitly specify headers
+    delimiter: ',',             // CSV delimiter
+    includeHeaders: true,       // Include headers in result
+    flattenObjects: true        // Flatten nested objects
 });
 ```
 
-#### XML в JSON
+#### XML to JSON
 ```javascript
 await converter.xmlToJson(file, {
-    attributePrefix: '@',        // Префикс для атрибутов
-    textNodeName: '#text',       // Имя для текстовых узлов
-    ignoreAttributes: false,     // Игнорировать атрибуты
-    parseNumbers: true,          // Автоматически парсить числа
-    parseBooleans: true,         // Автоматически парсить булевы значения
-    arrayMode: true              // Массивы для повторяющихся элементов
+    attributePrefix: '@',        // Attribute prefix
+    textNodeName: '#text',       // Text node name
+    ignoreAttributes: false,     // Ignore attributes
+    parseNumbers: true,          // Automatically parse numbers
+    parseBooleans: true,         // Automatically parse booleans
+    arrayMode: true              // Arrays for repeating elements
 });
 ```
 
-#### JSON в XML
+#### JSON to XML
 ```javascript
 await converter.jsonToXml(file, {
-    rootName: 'root',           // Имя корневого элемента
-    itemName: 'item',           // Имя для элементов массива
-    attributePrefix: '@',        // Префикс атрибутов в JSON
-    textNodeName: '#text',       // Имя текстовых узлов
-    pretty: true,               // Форматированный вывод
-    declaration: true           // Включить XML декларацию
+    rootName: 'root',           // Root element name
+    itemName: 'item',           // Array element name
+    attributePrefix: '@',        // Attribute prefix in JSON
+    textNodeName: '#text',       // Text node name
+    pretty: true,               // Formatted output
+    declaration: true           // Include XML declaration
 });
 ```
 
-#### Markdown в HTML
+#### Markdown to HTML
 ```javascript
 await converter.markdownToHtml(file, {
-    enableTables: true,          // Поддержка таблиц
-    enableCodeBlocks: true,      // Блоки кода с подсветкой
-    enableStrikethrough: true,   // Зачеркивание ~~text~~
-    enableTaskLists: true,       // Списки задач - [ ] и - [x]
-    enableAutoLinks: true,       // Автоматические ссылки
-    enableLineBreaks: true       // Переносы строк как <br>
+    enableTables: true,          // Table support
+    enableCodeBlocks: true,      // Code blocks with highlighting
+    enableStrikethrough: true,   // Strikethrough ~~text~~
+    enableTaskLists: true,       // Task lists - [ ] and - [x]
+    enableAutoLinks: true,       // Automatic links
+    enableLineBreaks: true       // Line breaks as <br>
 });
 ```
 
-## Пакетная обработка
+## Batch Processing
 
 ```javascript
-// Конвертация нескольких файлов
+// Convert multiple files
 const results = await converter.convertMultiple('jpg-to-png', files, {
-    // Опции конвертации
+    // Conversion options
 });
 
-// Результат содержит информацию о каждом файле
+// Result contains information about each file
 results.forEach(result => {
     if (result.success) {
-        console.log(`✓ ${result.file.name} конвертирован успешно`);
+        console.log(`✓ ${result.file.name} converted successfully`);
     } else {
         console.log(`✗ ${result.file.name}: ${result.error}`);
     }
 });
 ```
 
-## Утилиты
-
-```javascript
-// Получить список поддерживаемых форматов
-const formats = OmniConvert.getSupportedFormats();
-console.log(formats);
-
-// Создать экземпляр с заводскими настройками
-const converter = OmniConvert.create({
-    enableLogging: true
-});
-
-// Генерация имени файла
-const filename = OmniConvert.generateFilename('photo.jpg', 'png');
-// Результат: photo-converted-2024-01-01T12-00-00.png
-
-// Форматирование размера файла
-const size = OmniConvert.formatFileSize(1024000);
-// Результат: 1000.00 KB
-
-// Валидация типа файла
-const isValid = OmniConvert.validateFileType(file, ['image/jpeg', 'image/png']);
-```
-
-## Обработка ошибок
+## Error Handling
 
 ```javascript
 try {
     const result = await converter.jpgToPng(files);
-    console.log('Конвертация завершена:', result);
+    console.log('Conversion completed:', result);
 } catch (error) {
-    console.error('Ошибка конвертации:', error.message);
+    console.error('Conversion error:', error.message);
 }
 
-// Или через callback
+// Or via callback
 const converter = new OmniConvert({
     errorCallback: (message, error) => {
-        // Обработка ошибок
-        console.error(`Ошибка: ${message}`, error);
+        // Error handling
+        console.error(`Error: ${message}`, error);
     },
     successCallback: (message, data) => {
-        // Обработка успешного результата
-        console.log(`Успех: ${message}`, data);
+        // Success handling
+        console.log(`Success: ${message}`, data);
     }
 });
 ```
 
-## Расширенное использование
+## Advanced Usage
 
-### Регистрация собственных конвертеров
+### Custom Converter Registration
 
 ```javascript
 class CustomConverter extends BaseConverter {
     async convert(file) {
-        // Ваша логика конвертации
+        // Your conversion logic
         return {
             filename: 'converted.txt',
             blob: new Blob(['converted content']),
@@ -310,14 +255,14 @@ class CustomConverter extends BaseConverter {
     }
 }
 
-// Регистрация
+// Registration
 converter.registerConverter('custom', CustomConverter);
 
-// Использование
+// Usage
 await converter.convertFiles('custom', files);
 ```
 
-### Создание специализированного конвертера
+### Creating Specialized Converter
 
 ```javascript
 const imageConverter = converter.createConverter('jpg-to-png', {
@@ -328,30 +273,30 @@ const imageConverter = converter.createConverter('jpg-to-png', {
 const result = await imageConverter.convert(file);
 ```
 
-## Браузерная совместимость
+## Browser Compatibility
 
-- **Chrome/Edge**: Полная поддержка всех функций
-- **Firefox**: Полная поддержка всех функций  
-- **Safari**: Полная поддержка (HEIC требует библиотеку)
-- **Mobile**: Поддержка основных функций
+- **Chrome/Edge**: Full support for all features
+- **Firefox**: Full support for all features  
+- **Safari**: Full support (HEIC requires library)
+- **Mobile**: Support for core features
 
-## Зависимости
+## Dependencies
 
-### Обязательные
-- Отсутствуют - библиотека работает без внешних зависимостей
+### Required
+- None - library works without external dependencies
 
-### Опциональные
-- **heic2any** - для конвертации HEIC файлов
-- **FFmpeg.js** - для расширенной работы с видео/GIF
+### Optional
+- **heic2any** - for HEIC file conversion
+- **FFmpeg.js** - for advanced video/GIF work
 
 ```html
-<!-- Для HEIC поддержки -->
+<!-- For HEIC support -->
 <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
 
-<!-- Для улучшенной работы с видео -->
+<!-- For enhanced video work -->
 <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.7/dist/umd/ffmpeg.js"></script>
 ```
 
-## Лицензия
+## License
 
-MIT License - используйте свободно в любых проектах.
+MIT License - use freely in any projects.
