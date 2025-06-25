@@ -1,9 +1,9 @@
 /**
- * OmniConvert - Полная библиотека для конвертации файлов в браузере
+ * OmniConvert - Complete library for file conversion in browser
  * @version 1.0.0
  * @license MIT
  * 
- * Использование:
+ * Usage:
  * <script src="omni-convert.js"></script>
  * <script>
  *   const converter = new OmniConvert();
@@ -15,7 +15,7 @@
     'use strict';
 
     /**
-     * Базовый класс OmniConvert Core
+     * Base OmniConvert Core class
      */
     class OmniConvertCore {
         constructor(options = {}) {
@@ -155,7 +155,7 @@
     }
 
     /**
-     * Базовый класс для всех конвертеров
+     * Base class for all converters
      */
     class BaseConverter {
         constructor(options = {}) {
@@ -196,7 +196,7 @@
     }
 
     /**
-     * КОНВЕРТЕРЫ ИЗОБРАЖЕНИЙ
+     * IMAGE CONVERTERS
      */
 
     // JPG to PNG Converter
@@ -899,7 +899,7 @@
     }
 
     /**
-     * КОНВЕРТЕРЫ ДАННЫХ
+     * DATA CONVERTERS
      */
 
     // CSV to JSON Converter
@@ -1548,7 +1548,7 @@
     }
 
     /**
-     * ГЛАВНЫЙ КЛАСС OMNICONVERT
+     * MAIN OMNICONVERT CLASS
      */
     class OmniConvert extends OmniConvertCore {
         constructor(options = {}) {
@@ -1586,7 +1586,7 @@
             this.registerConverter('markdown-to-html', MarkdownToHtmlConverter);
         }
 
-        // Удобные методы для популярных конвертаций
+        // Convenient methods for popular conversions
         async jpgToPng(files, options = {}) {
             return this.convertFiles('jpg-to-png', files, options);
         }
@@ -1884,16 +1884,16 @@
         }
     }
 
-    // ЭКСПОРТ ДЛЯ БРАУЗЕРА
+    // BROWSER EXPORT
     if (typeof window !== 'undefined') {
-        // Главный класс
+        // Main class
         window.OmniConvert = OmniConvert;
         
-        // Базовые классы (если нужны для расширения)  
+        // Base classes (if needed for extension)  
         window.OmniConvertCore = OmniConvertCore;
         window.BaseConverter = BaseConverter;
         
-        // Отдельные конвертеры (если нужны для прямого использования)
+        // Individual converters (if needed for direct usage)
         window.JpgToPngConverter = JpgToPngConverter;
         window.PngToJpgConverter = PngToJpgConverter;
         window.WebpToJpgConverter = WebpToJpgConverter;
@@ -1910,7 +1910,7 @@
         window.JsonToXmlConverter = JsonToXmlConverter;
         window.MarkdownToHtmlConverter = MarkdownToHtmlConverter;
         
-        // Создаем глобальный экземпляр для быстрого использования
+        // Create global instance for quick usage
         window.omniConvert = new OmniConvert();
         
         console.log('🔄 OmniConvert library loaded successfully!');

@@ -3,7 +3,7 @@ name: Deploy omni-convert.js via FTP
 on:
   push:
     branches:
-      - main          # или та ветка, где лежит файл
+      - main          # or the branch where the file is located
 
 jobs:
   deploy:
@@ -13,29 +13,29 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v3
 
-      - name: Debug — показать дерево
+      - name: Debug — show file tree
         run: |
           echo '=== repo files ==='
           ls -R .
 
-      - name: FTP deploy (только omni-convert.js)
+      - name: FTP deploy (only omni-convert.js)
         uses: SamKirkland/FTP-Deploy-Action@4.3.0
         with:
           server:     ${{ secrets.FTP_HOST }}
           username:   ${{ secrets.FTP_USER }}
           password:   ${{ secrets.FTP_PASS }}
-          protocol:   ftps                # или ftp, если FTPS нет
+          protocol:   ftps                # or ftp, if FTPS is not available
           port:       ${{ secrets.FTP_PORT }}
 
-          #  Что заливаем
-          local-dir:  src/                # только содержимое каталога src/
-          #  Куда заливаем (js/ внутри сайта)
-          server-dir: js/                 # относительный путь: /www/…/js/
+          #  What we upload
+          local-dir:  src/                # only contents of src/ directory
+          #  Where we upload (js/ inside the site)
+          server-dir: js/                 # relative path: /www/…/js/
 
-          #  Ничего лишнего не трогаем
+          #  Don't touch anything extra
           dangerous-clean-slate: false
 
-          #  Исключаем служебные файлы, если вдруг попадут
+          #  Exclude service files, if they accidentally get in
           exclude: |
             .git*
             .github/**
